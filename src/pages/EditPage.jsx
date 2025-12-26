@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMedExtractStore } from '../store/resultText';
 
-const API_CONFIG = { CORRECTIONS_API_URL: 'http://localhost:3001/submit-corrections' };
+const backUrl = import.meta.env.VITE_BACKEND_URL;
+const API_CONFIG = { CORRECTIONS_API_URL: `${backUrl}/submit-corrections` };
 
 const ResultsPage = () => {
   const navigate = useNavigate();

@@ -2,10 +2,11 @@ import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom';
 import { useMedExtractStore } from '../store/resultText';
 
+const backUrl = import.meta.env.VITE_BACKEND_URL;
 const API_CONFIG = {
   GPU_URL: 'https://8i1g7j94qekjwr-7000.proxy.runpod.net',
   CPU_URL: 'http://103.142.175.170:8001',
-  CODING_API_URL: 'http://localhost:3001'
+  CODING_API_URL: `${backUrl}`
 };
 
 const MedExtract = () => {

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-const API_CONFIG = { ANALYTICS_URL: 'http://localhost:3001/analytics' };
+const backUrl = import.meta.env.VITE_BACKEND_URL;
+const API_CONFIG = { ANALYTICS_URL: `${backUrl}/analytics` };
 
 const AnalyticsPage = () => {
   const navigate = useNavigate();
