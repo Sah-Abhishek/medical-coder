@@ -295,8 +295,8 @@ const ResultsPage = () => {
                 <button
                   onClick={() => setActiveDoc('hp')}
                   className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${activeDoc === 'hp'
-                      ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40'
-                      : 'text-zinc-400 hover:text-zinc-200'
+                    ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40'
+                    : 'text-zinc-400 hover:text-zinc-200'
                     }`}
                 >
                   <span className={`w-6 h-6 rounded flex items-center justify-center text-xs font-bold ${activeDoc === 'hp' ? 'bg-blue-500 text-white' : 'bg-zinc-700 text-zinc-400'
@@ -306,8 +306,8 @@ const ResultsPage = () => {
                 <button
                   onClick={() => setActiveDoc('op')}
                   className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${activeDoc === 'op'
-                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
-                      : 'text-zinc-400 hover:text-zinc-200'
+                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                    : 'text-zinc-400 hover:text-zinc-200'
                     }`}
                 >
                   <span className={`w-6 h-6 rounded flex items-center justify-center text-xs font-bold ${activeDoc === 'op' ? 'bg-emerald-500 text-white' : 'bg-zinc-700 text-zinc-400'
@@ -431,8 +431,8 @@ const ResultsPage = () => {
               onClick={handleApprove}
               disabled={isSubmitting}
               className={`flex-1 px-3 py-2.5 text-white text-sm font-medium rounded-lg transition-all flex items-center justify-center gap-2 ${hasChanges
-                  ? 'bg-amber-600 hover:bg-amber-500'
-                  : 'bg-emerald-600 hover:bg-emerald-500'
+                ? 'bg-amber-600 hover:bg-amber-500'
+                : 'bg-emerald-600 hover:bg-emerald-500'
                 }`}
             >
               {isSubmitting ? (
@@ -447,12 +447,14 @@ const ResultsPage = () => {
             </button>
             <button
               onClick={handleSave}
-              className="px-3 py-2.5 bg-[#1a1a1d] hover:bg-[#242428] text-zinc-300 text-sm font-medium rounded-lg transition-colors border border-[#2a2a2e]"
+              className="px-3 cursor-not-allowed py-2.5 bg-[#1a1a1d]  text-zinc-300 text-sm font-medium rounded-lg transition-colors border border-[#2a2a2e]"
               title="Download JSON"
+              disabled
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-              </svg>
+              {/* <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"> */}
+              {/*   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /> */}
+              {/* </svg> */}
+              <span>Upload</span>
             </button>
           </div>
         </div>
@@ -490,8 +492,8 @@ const ViewModeButton = ({ active, onClick, icon, label }) => {
     <button
       onClick={onClick}
       className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all ${active
-          ? 'bg-[#1a1a1d] text-white'
-          : 'text-zinc-500 hover:text-zinc-300'
+        ? 'bg-[#1a1a1d] text-white'
+        : 'text-zinc-500 hover:text-zinc-300'
         }`}
     >
       {getIcon()}
