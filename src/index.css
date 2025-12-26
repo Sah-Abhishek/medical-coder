@@ -1,0 +1,12 @@
+@import "tailwindcss";
+
+/* Tailwind v4 theme config */
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui;
+}
+
+body {
+  font-family: var(--font-sans);
+}
+
+
