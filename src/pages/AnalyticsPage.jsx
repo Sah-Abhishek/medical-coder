@@ -10,7 +10,7 @@ const AnalyticsPage = () => {
   const [error, setError] = useState(null);
   const [data, setData] = useState(null);
   const [selectedRecord, setSelectedRecord] = useState(null);
-  const [viewerModal, setViewerModal] = useState(null); // { type: 'pdf'|'image'|'text'|'summary', url, content, title }
+  const [viewerModal, setViewerModal] = useState(null);
 
   useEffect(() => {
     fetchAnalytics();
@@ -50,10 +50,53 @@ const AnalyticsPage = () => {
     return 'bg-red-500/20';
   };
 
-  const openDocumentViewer = (record, type, reportType) => {
+  // ============================================
+  // Helper to get document URLs (supports both single and multiple)
+  // ============================================
+  const getDocUrls = (record, reportType) => {
+    const isHp = reportType === 'hp';
+
+    // Try array URLs first
+    const urlsArray = isHp ? record.s3_hp_doc_urls : record.s3_op_doc_urls;
+    if (urlsArray && Array.isArray(urlsArray) && urlsArray.length > 0) {
+      return urlsArray.filter(url => url);
+    }
+
+    // Fallback to single URL
+    const singleUrl = isHp ? record.s3_hp_doc_url : record.s3_op_doc_url;
+    if (singleUrl) {
+      return [singleUrl];
+    }
+
+    return [];
+  };
+
+  // ============================================
+  // Helper to get file type for a URL
+  // ============================================
+  const getFileTypeForUrl = (url, record, reportType) => {
+    if (!url) return 'text';
+
+    // Check URL extension first
+    const urlLower = url.toLowerCase();
+    if (urlLower.endsWith('.pdf')) return 'pdf';
+    if (urlLower.match(/\.(jpg|jpeg|png|gif|webp)$/)) return 'image';
+
+    // Fallback to record's file type
     const isHp = reportType === 'hp';
     const fileType = isHp ? record.hp_file_type : record.op_file_type;
-    const docUrl = isHp ? record.s3_hp_doc_url : record.s3_op_doc_url;
+
+    if (fileType === 'pdf') return 'pdf';
+    if (fileType === 'image' || fileType === 'multi-image') return 'image';
+
+    return 'text';
+  };
+
+  // ============================================
+  // Open document viewer with multi-document support
+  // ============================================
+  const openDocumentViewer = (record, type, reportType) => {
+    const isHp = reportType === 'hp';
     const summaryUrl = isHp ? record.s3_hp_summary_url : record.s3_op_summary_url;
     const summary = isHp ? record.ai_summary_hp : record.ai_summary_op;
     const text = isHp ? record.hp_text : record.op_text;
@@ -66,12 +109,26 @@ const AnalyticsPage = () => {
         url: summaryUrl
       });
     } else if (type === 'document') {
-      if (fileType === 'pdf' && docUrl) {
-        setViewerModal({ type: 'pdf', title: `${isHp ? 'HP' : 'OP'} Document`, url: docUrl });
-      } else if (fileType === 'image' && docUrl) {
-        setViewerModal({ type: 'image', title: `${isHp ? 'HP' : 'OP'} Document`, url: docUrl });
-      } else {
-        setViewerModal({ type: 'text', title: `${isHp ? 'HP' : 'OP'} Document`, content: text || 'No text available' });
+      const docUrls = getDocUrls(record, reportType);
+
+      if (docUrls.length > 0) {
+        // Has document URLs - show document viewer
+        setViewerModal({
+          type: 'multi-document',
+          title: `${isHp ? 'HP' : 'OP'} Document${docUrls.length > 1 ? 's' : ''}`,
+          urls: docUrls,
+          currentIndex: 0,
+          record,
+          reportType,
+          fallbackText: text
+        });
+      } else if (text) {
+        // No URLs but has text - show text
+        setViewerModal({
+          type: 'text',
+          title: `${isHp ? 'HP' : 'OP'} Document`,
+          content: text
+        });
       }
     }
   };
@@ -203,82 +260,97 @@ const AnalyticsPage = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/50">
-                  {data.records.map((record) => (
-                    <tr key={record.id} className="hover:bg-zinc-800/20 transition-colors">
-                      <td className="px-4 py-3 text-sm font-mono text-white">{record.mr_number || 'N/A'}</td>
-                      <td className="px-4 py-3 text-sm font-mono text-zinc-300">{record.acct_number || 'N/A'}</td>
-                      <td className="px-4 py-3 text-sm text-zinc-300">{record.dos || 'N/A'}</td>
-                      <td className="px-4 py-3 text-center">
-                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium ${getAccuracyBgColor(record.accuracy_percentage)} ${getAccuracyColor(record.accuracy_percentage)}`}>
-                          {parseFloat(record.accuracy_percentage)?.toFixed(1) || 0}%
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-center gap-2">
-                          {/* HP Documents */}
-                          <div className="flex items-center gap-1">
-                            <span className="text-xs text-blue-400 font-medium">HP:</span>
-                            {(record.s3_hp_doc_url || record.hp_text) && (
-                              <button
-                                onClick={() => openDocumentViewer(record, 'document', 'hp')}
-                                className="p-1 hover:bg-zinc-700 rounded transition-colors"
-                                title="View HP Document"
-                              >
-                                <DocIcon type={record.hp_file_type} />
-                              </button>
-                            )}
-                            {(record.s3_hp_summary_url || record.ai_summary_hp) && (
-                              <button
-                                onClick={() => openDocumentViewer(record, 'summary', 'hp')}
-                                className="p-1 hover:bg-zinc-700 rounded transition-colors"
-                                title="View HP Summary"
-                              >
-                                <svg className="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                                </svg>
-                              </button>
-                            )}
+                  {data.records.map((record) => {
+                    const hpDocCount = getDocUrls(record, 'hp').length;
+                    const opDocCount = getDocUrls(record, 'op').length;
+
+                    return (
+                      <tr key={record.id} className="hover:bg-zinc-800/20 transition-colors">
+                        <td className="px-4 py-3 text-sm font-mono text-white">{record.mr_number || 'N/A'}</td>
+                        <td className="px-4 py-3 text-sm font-mono text-zinc-300">{record.acct_number || 'N/A'}</td>
+                        <td className="px-4 py-3 text-sm text-zinc-300">{record.dos || 'N/A'}</td>
+                        <td className="px-4 py-3 text-center">
+                          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium ${getAccuracyBgColor(record.accuracy_percentage)} ${getAccuracyColor(record.accuracy_percentage)}`}>
+                            {parseFloat(record.accuracy_percentage)?.toFixed(1) || 0}%
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center justify-center gap-2">
+                            {/* HP Documents */}
+                            <div className="flex items-center gap-1">
+                              <span className="text-xs text-blue-400 font-medium">HP:</span>
+                              {(hpDocCount > 0 || record.hp_text) && (
+                                <button
+                                  onClick={() => openDocumentViewer(record, 'document', 'hp')}
+                                  className="p-1 hover:bg-zinc-700 rounded transition-colors flex items-center gap-0.5"
+                                  title={`View HP Document${hpDocCount > 1 ? 's' : ''}`}
+                                >
+                                  <DocIcon type={record.hp_file_type} />
+                                  {hpDocCount > 1 && (
+                                    <span className="text-[10px] bg-blue-500/30 text-blue-300 px-1 rounded">
+                                      {hpDocCount}
+                                    </span>
+                                  )}
+                                </button>
+                              )}
+                              {(record.s3_hp_summary_url || record.ai_summary_hp) && (
+                                <button
+                                  onClick={() => openDocumentViewer(record, 'summary', 'hp')}
+                                  className="p-1 hover:bg-zinc-700 rounded transition-colors"
+                                  title="View HP Summary"
+                                >
+                                  <svg className="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                                  </svg>
+                                </button>
+                              )}
+                            </div>
+                            <span className="text-zinc-600">|</span>
+                            {/* OP Documents */}
+                            <div className="flex items-center gap-1">
+                              <span className="text-xs text-emerald-400 font-medium">OP:</span>
+                              {(opDocCount > 0 || record.op_text) && (
+                                <button
+                                  onClick={() => openDocumentViewer(record, 'document', 'op')}
+                                  className="p-1 hover:bg-zinc-700 rounded transition-colors flex items-center gap-0.5"
+                                  title={`View OP Document${opDocCount > 1 ? 's' : ''}`}
+                                >
+                                  <DocIcon type={record.op_file_type} />
+                                  {opDocCount > 1 && (
+                                    <span className="text-[10px] bg-emerald-500/30 text-emerald-300 px-1 rounded">
+                                      {opDocCount}
+                                    </span>
+                                  )}
+                                </button>
+                              )}
+                              {(record.s3_op_summary_url || record.ai_summary_op) && (
+                                <button
+                                  onClick={() => openDocumentViewer(record, 'summary', 'op')}
+                                  className="p-1 hover:bg-zinc-700 rounded transition-colors"
+                                  title="View OP Summary"
+                                >
+                                  <svg className="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                                  </svg>
+                                </button>
+                              )}
+                            </div>
                           </div>
-                          <span className="text-zinc-600">|</span>
-                          {/* OP Documents */}
-                          <div className="flex items-center gap-1">
-                            <span className="text-xs text-emerald-400 font-medium">OP:</span>
-                            {(record.s3_op_doc_url || record.op_text) && (
-                              <button
-                                onClick={() => openDocumentViewer(record, 'document', 'op')}
-                                className="p-1 hover:bg-zinc-700 rounded transition-colors"
-                                title="View OP Document"
-                              >
-                                <DocIcon type={record.op_file_type} />
-                              </button>
-                            )}
-                            {(record.s3_op_summary_url || record.ai_summary_op) && (
-                              <button
-                                onClick={() => openDocumentViewer(record, 'summary', 'op')}
-                                className="p-1 hover:bg-zinc-700 rounded transition-colors"
-                                title="View OP Summary"
-                              >
-                                <svg className="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                                </svg>
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-zinc-400">
-                        {new Date(record.updated_at).toLocaleDateString()}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <button
-                          onClick={() => setSelectedRecord(record)}
-                          className="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs rounded-lg transition-colors"
-                        >
-                          Details
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-zinc-400">
+                          {new Date(record.updated_at).toLocaleDateString()}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <button
+                            onClick={() => setSelectedRecord(record)}
+                            className="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs rounded-lg transition-colors"
+                          >
+                            Details
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -302,12 +374,18 @@ const AnalyticsPage = () => {
             onClose={() => setSelectedRecord(null)}
             getAccuracyColor={getAccuracyColor}
             openDocumentViewer={openDocumentViewer}
+            getDocUrls={getDocUrls}
           />
         )}
 
         {/* Document/Summary Viewer Modal */}
         {viewerModal && (
-          <ViewerModal modal={viewerModal} onClose={() => setViewerModal(null)} />
+          <ViewerModal
+            modal={viewerModal}
+            onClose={() => setViewerModal(null)}
+            setViewerModal={setViewerModal}
+            getFileTypeForUrl={getFileTypeForUrl}
+          />
         )}
       </div>
     </div>
@@ -323,7 +401,7 @@ const DocIcon = ({ type }) => {
       </svg>
     );
   }
-  if (type === 'image') {
+  if (type === 'image' || type === 'multi-image') {
     return (
       <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -337,17 +415,111 @@ const DocIcon = ({ type }) => {
   );
 };
 
-// Viewer Modal Component
-const ViewerModal = ({ modal, onClose }) => {
+// Viewer Modal Component - Updated with multi-document support
+const ViewerModal = ({ modal, onClose, setViewerModal, getFileTypeForUrl }) => {
+  const [currentIndex, setCurrentIndex] = useState(modal.currentIndex || 0);
+  const [imageZoom, setImageZoom] = useState(1);
+  const [imageError, setImageError] = useState(false);
+
+  // For multi-document view
+  const isMultiDoc = modal.type === 'multi-document';
+  const urls = isMultiDoc ? modal.urls : [];
+  const totalDocs = urls.length;
+  const currentUrl = isMultiDoc ? urls[currentIndex] : modal.url;
+  const currentFileType = isMultiDoc
+    ? getFileTypeForUrl(currentUrl, modal.record, modal.reportType)
+    : modal.type;
+
+  // Reset state when modal changes
+  useEffect(() => {
+    setCurrentIndex(modal.currentIndex || 0);
+    setImageZoom(1);
+    setImageError(false);
+  }, [modal]);
+
+  // Keyboard navigation
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (!isMultiDoc) return;
+      if (e.key === 'ArrowLeft' && currentIndex > 0) {
+        setCurrentIndex(prev => prev - 1);
+        setImageZoom(1);
+        setImageError(false);
+      } else if (e.key === 'ArrowRight' && currentIndex < totalDocs - 1) {
+        setCurrentIndex(prev => prev + 1);
+        setImageZoom(1);
+        setImageError(false);
+      } else if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isMultiDoc, currentIndex, totalDocs, onClose]);
+
+  const goToPrev = () => {
+    if (currentIndex > 0) {
+      setCurrentIndex(prev => prev - 1);
+      setImageZoom(1);
+      setImageError(false);
+    }
+  };
+
+  const goToNext = () => {
+    if (currentIndex < totalDocs - 1) {
+      setCurrentIndex(prev => prev + 1);
+      setImageZoom(1);
+      setImageError(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-zinc-900 rounded-2xl border border-zinc-800 max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+      <div className="bg-zinc-900 rounded-2xl border border-zinc-800 max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+        {/* Header */}
         <div className="px-6 py-4 border-b border-zinc-800 flex items-center justify-between flex-shrink-0">
-          <h3 className="text-lg font-semibold text-white">{modal.title}</h3>
+          <div className="flex items-center gap-3">
+            <h3 className="text-lg font-semibold text-white">{modal.title}</h3>
+            {isMultiDoc && totalDocs > 1 && (
+              <span className="px-2 py-0.5 bg-purple-500/20 text-purple-300 text-xs rounded-full">
+                {currentIndex + 1} of {totalDocs}
+              </span>
+            )}
+          </div>
           <div className="flex items-center gap-2">
-            {modal.url && (
+            {/* Zoom controls for images */}
+            {(currentFileType === 'image' || (isMultiDoc && getFileTypeForUrl(currentUrl, modal.record, modal.reportType) === 'image')) && (
+              <div className="flex items-center gap-1 mr-2">
+                <button
+                  onClick={() => setImageZoom(prev => Math.max(0.25, prev - 0.25))}
+                  className="p-1.5 hover:bg-zinc-800 rounded transition-colors"
+                  title="Zoom out"
+                >
+                  <svg className="w-4 h-4 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+                  </svg>
+                </button>
+                <span className="text-xs text-zinc-400 w-12 text-center">{Math.round(imageZoom * 100)}%</span>
+                <button
+                  onClick={() => setImageZoom(prev => Math.min(4, prev + 0.25))}
+                  className="p-1.5 hover:bg-zinc-800 rounded transition-colors"
+                  title="Zoom in"
+                >
+                  <svg className="w-4 h-4 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => setImageZoom(1)}
+                  className="px-2 py-1 text-xs text-zinc-400 hover:bg-zinc-800 rounded transition-colors"
+                >
+                  Reset
+                </button>
+              </div>
+            )}
+            {currentUrl && (
               <a
-                href={modal.url}
+                href={currentUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs rounded-lg transition-colors flex items-center gap-1"
@@ -366,37 +538,139 @@ const ViewerModal = ({ modal, onClose }) => {
           </div>
         </div>
 
-        <div className="flex-1 overflow-auto p-6">
-          {modal.type === 'pdf' && modal.url && (
+        {/* Content */}
+        <div className="flex-1 overflow-auto p-6 relative">
+          {/* Multi-document navigation arrows */}
+          {isMultiDoc && totalDocs > 1 && (
+            <>
+              <button
+                onClick={goToPrev}
+                disabled={currentIndex === 0}
+                className={`absolute left-2 top-1/2 -translate-y-1/2 z-10 p-2 rounded-full transition-all ${currentIndex === 0
+                    ? 'bg-zinc-800/30 text-zinc-600 cursor-not-allowed'
+                    : 'bg-zinc-800 hover:bg-zinc-700 text-white'
+                  }`}
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+              <button
+                onClick={goToNext}
+                disabled={currentIndex === totalDocs - 1}
+                className={`absolute right-2 top-1/2 -translate-y-1/2 z-10 p-2 rounded-full transition-all ${currentIndex === totalDocs - 1
+                    ? 'bg-zinc-800/30 text-zinc-600 cursor-not-allowed'
+                    : 'bg-zinc-800 hover:bg-zinc-700 text-white'
+                  }`}
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            </>
+          )}
+
+          {/* PDF Viewer */}
+          {(modal.type === 'pdf' || (isMultiDoc && getFileTypeForUrl(currentUrl, modal.record, modal.reportType) === 'pdf')) && currentUrl && (
             <iframe
-              src={modal.url}
+              src={currentUrl}
               className="w-full h-[70vh] rounded-lg border border-zinc-700"
               title="PDF Viewer"
             />
           )}
 
-          {modal.type === 'image' && modal.url && (
-            <div className="flex items-center justify-center">
-              <img
-                src={modal.url}
-                alt="Document"
-                className="max-w-full max-h-[70vh] rounded-lg object-contain"
-              />
+          {/* Image Viewer */}
+          {(modal.type === 'image' || (isMultiDoc && getFileTypeForUrl(currentUrl, modal.record, modal.reportType) === 'image')) && currentUrl && (
+            <div className="flex items-center justify-center overflow-auto" style={{ maxHeight: '70vh' }}>
+              {imageError ? (
+                <div className="text-center py-12">
+                  <svg className="w-16 h-16 text-zinc-600 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  <p className="text-zinc-400 mb-2">Failed to load image</p>
+                  <p className="text-zinc-600 text-xs mb-4 font-mono break-all max-w-md">{currentUrl}</p>
+                  <button
+                    onClick={() => setImageError(false)}
+                    className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-sm rounded-lg transition-colors"
+                  >
+                    Retry
+                  </button>
+                </div>
+              ) : (
+                <img
+                  src={currentUrl}
+                  alt={`Document ${currentIndex + 1}`}
+                  className="max-w-full rounded-lg object-contain transition-transform duration-200"
+                  style={{ transform: `scale(${imageZoom})`, transformOrigin: 'center' }}
+                  onError={() => setImageError(true)}
+                />
+              )}
             </div>
           )}
 
+          {/* Text Viewer */}
           {modal.type === 'text' && (
             <pre className="bg-zinc-800/50 rounded-lg p-4 text-zinc-300 text-sm font-mono whitespace-pre-wrap overflow-auto max-h-[70vh]">
               {modal.content}
             </pre>
           )}
 
+          {/* Summary Viewer */}
           {modal.type === 'summary' && modal.content && (
             <div className="space-y-4">
               <SummaryDisplay summary={modal.content} />
             </div>
           )}
+
+          {/* Fallback to text if no URL available */}
+          {isMultiDoc && !currentUrl && modal.fallbackText && (
+            <pre className="bg-zinc-800/50 rounded-lg p-4 text-zinc-300 text-sm font-mono whitespace-pre-wrap overflow-auto max-h-[70vh]">
+              {modal.fallbackText}
+            </pre>
+          )}
         </div>
+
+        {/* Thumbnail strip for multi-document */}
+        {isMultiDoc && totalDocs > 1 && (
+          <div className="px-6 py-3 border-t border-zinc-800 bg-zinc-900/80">
+            <div className="flex gap-2 overflow-x-auto">
+              {urls.map((url, index) => {
+                const fileType = getFileTypeForUrl(url, modal.record, modal.reportType);
+                const isActive = index === currentIndex;
+                return (
+                  <button
+                    key={index}
+                    onClick={() => {
+                      setCurrentIndex(index);
+                      setImageZoom(1);
+                      setImageError(false);
+                    }}
+                    className={`flex-shrink-0 w-16 h-12 rounded-lg overflow-hidden border-2 transition-all ${isActive ? 'border-purple-500 ring-2 ring-purple-500/30' : 'border-zinc-700 hover:border-zinc-600'
+                      }`}
+                  >
+                    {fileType === 'pdf' ? (
+                      <div className="w-full h-full bg-zinc-800 flex items-center justify-center">
+                        <svg className="w-6 h-6 text-red-400" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z" />
+                        </svg>
+                      </div>
+                    ) : (
+                      <img
+                        src={url}
+                        alt={`Thumbnail ${index + 1}`}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                          e.target.parentElement.innerHTML = `<div class="w-full h-full bg-zinc-800 flex items-center justify-center text-zinc-500 text-xs">${index + 1}</div>`;
+                        }}
+                      />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -557,8 +831,11 @@ const SummaryDisplay = ({ summary }) => {
   );
 };
 
-// Detail Modal Component
-const DetailModal = ({ record, onClose, getAccuracyColor, openDocumentViewer }) => {
+// Detail Modal Component - Updated with multi-document support
+const DetailModal = ({ record, onClose, getAccuracyColor, openDocumentViewer, getDocUrls }) => {
+  const hpDocCount = getDocUrls(record, 'hp').length;
+  const opDocCount = getDocUrls(record, 'op').length;
+
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div className="bg-zinc-900 rounded-2xl border border-zinc-800 max-w-3xl w-full max-h-[90vh] overflow-auto" onClick={e => e.stopPropagation()}>
@@ -610,11 +887,16 @@ const DetailModal = ({ record, onClose, getAccuracyColor, openDocumentViewer }) 
               <h4 className="text-blue-400 font-medium mb-3 flex items-center gap-2">
                 <span className="w-6 h-6 rounded bg-blue-500/20 flex items-center justify-center text-xs font-bold">HP</span>
                 History & Physical
+                {hpDocCount > 1 && (
+                  <span className="text-[10px] bg-blue-500/30 text-blue-300 px-1.5 py-0.5 rounded">
+                    {hpDocCount} docs
+                  </span>
+                )}
               </h4>
               <div className="flex gap-2">
-                {(record.s3_hp_doc_url || record.hp_text) && (
+                {(hpDocCount > 0 || record.hp_text) && (
                   <button onClick={() => openDocumentViewer(record, 'document', 'hp')} className="flex-1 px-3 py-2 bg-zinc-700/50 hover:bg-zinc-700 rounded-lg text-sm text-zinc-300 transition-colors">
-                    View Document
+                    View Document{hpDocCount > 1 ? 's' : ''}
                   </button>
                 )}
                 {(record.s3_hp_summary_url || record.ai_summary_hp) && (
@@ -629,11 +911,16 @@ const DetailModal = ({ record, onClose, getAccuracyColor, openDocumentViewer }) 
               <h4 className="text-emerald-400 font-medium mb-3 flex items-center gap-2">
                 <span className="w-6 h-6 rounded bg-emerald-500/20 flex items-center justify-center text-xs font-bold">OP</span>
                 Operative Report
+                {opDocCount > 1 && (
+                  <span className="text-[10px] bg-emerald-500/30 text-emerald-300 px-1.5 py-0.5 rounded">
+                    {opDocCount} docs
+                  </span>
+                )}
               </h4>
               <div className="flex gap-2">
-                {(record.s3_op_doc_url || record.op_text) && (
+                {(opDocCount > 0 || record.op_text) && (
                   <button onClick={() => openDocumentViewer(record, 'document', 'op')} className="flex-1 px-3 py-2 bg-zinc-700/50 hover:bg-zinc-700 rounded-lg text-sm text-zinc-300 transition-colors">
-                    View Document
+                    View Document{opDocCount > 1 ? 's' : ''}
                   </button>
                 )}
                 {(record.s3_op_summary_url || record.ai_summary_op) && (
